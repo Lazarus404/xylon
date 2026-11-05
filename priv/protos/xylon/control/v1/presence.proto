@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package xylon.control.v1;
+
+// Host-facing presence snapshot: same data as GET .../presence.
+service PresenceService {
+  rpc Get(GetPresenceRequest) returns (GetPresenceResponse);
+}
+
+message GetPresenceRequest {
+  string tenant_id = 1;
+  string session_id = 2;
+}
+
+message Participant {
+  string role = 1;
+  int64 joined_at = 2;
+  // Nested meta map encoded as JSON object text.
+  string meta_json = 3;
+}
+
+message GetPresenceResponse {
+  map<string, Participant> participants = 1;
+}

@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package xylon.control.v1;
+
+// Host-facing history snapshot: same data as GET .../history?label=.
+service HistoryService {
+  rpc Get(GetHistoryRequest) returns (GetHistoryResponse);
+}
+
+message GetHistoryRequest {
+  string tenant_id = 1;
+  string session_id = 2;
+  // Empty means "chat" (REST default).
+  string label = 3;
+}
+
+message HistoryMessage {
+  int64 ts = 1;
+  string from = 2;
+  string label = 3;
+  bytes payload = 4;
+}
+
+message GetHistoryResponse {
+  repeated HistoryMessage messages = 1;
+}

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Cache-Control" content="no-store">
+  <title>Xylon Echo</title>
+</head>
+<body>
+  <h1>Xylon Echo</h1>
+  <p id="status">Starting...</p>
+  <script>
+    const statusEl = document.getElementById("status");
+    const params = new URLSearchParams(location.search);
+    const useMic = params.get("mic") === "1";
+    const tenantId = params.get("tenant") || "lab";
+    const sessionId = params.get("session") || ("echo-" + Date.now());
+
+    function setStatus(text) {
+      statusEl.textContent = text;
+    }
+
+    async function main() {
+      if (!window.isSecureContext && location.hostname !== "127.0.0.1" && location.hostname !== "localhost") {
+        setStatus("Needs a secure context (https or localhost).");
+        return;
+      }
+
+      setStatus("Creating session " + sessionId + "...");
+      const create = await fetch("/v1/sessions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-tenant-id": tenantId
+        },
+        body: JSON.stringify({ session_id: sessionId, library: "echo" })
+      });
+      if (!create.ok && create.status !== 409) {
+        throw new Error("POST /v1/sessions " + create.status + " " + (await create.text()));
+      }
+
+      const pc = new RTCPeerConnection({ iceServers: [] });
+      pc.oniceconnectionstatechange = () => setStatus("ICE: " + pc.iceConnectionState);
+      pc.onconnectionstatechange = () => setStatus("conn: " + pc.connectionState);
+
+      pc.ontrack = (ev) => {
+        let audio = document.getElementById("echo-audio");
+        if (!audio) {
+          audio = document.createElement("audio");
+          audio.id = "echo-audio";
+          audio.autoplay = true;
+          document.body.appendChild(audio);
+        }
+        audio.srcObject = ev.streams[0] || new MediaStream([ev.track]);
+      };
+
+      if (useMic) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        for (const track of stream.getAudioTracks()) {
+          pc.addTrack(track, stream);
+        }
+      } else {
+        pc.addTransceiver("audio", { direction: "sendrecv" });
+      }
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      setStatus("Waiting for ICE gather...");
+      await waitIceGather(pc);
+
+      setStatus("POSTing offer...");
+      const resp = await fetch("/v1/sessions/" + encodeURIComponent(sessionId) + "/offer", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/sdp",
+          "x-tenant-id": tenantId
+        },
+        body: pc.localDescription.sdp
+      });
+      if (!resp.ok) {
+        throw new Error("POST offer " + resp.status + " " + (await resp.text()));
+      }
+      const answer = await resp.text();
+      await pc.setRemoteDescription({ type: "answer", sdp: answer });
+      setStatus("Answer applied. ICE: " + pc.iceConnectionState);
+    }
+
+    function waitIceGather(pc) {
+      if (pc.iceGatheringState === "complete") return Promise.resolve();
+      return new Promise((resolve) => {
+        const t = setTimeout(resolve, 2000);
+        pc.onicegatheringstatechange = () => {
+          if (pc.iceGatheringState === "complete") {
+            clearTimeout(t);
+            resolve();
+          }
+        };
+      });
+    }
+
+    main().catch((err) => {
+      console.error(err);
+      setStatus(String(err));
+    });
+  </script>
+</body>
+</html>

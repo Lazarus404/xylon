@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package xylon.control.v1;
+
+// Host-facing inject: same orchestration as POST .../data (Inject.publish/4).
+service InjectService {
+  rpc Publish(PublishRequest) returns (PublishResponse);
+}
+
+message PublishRequest {
+  string tenant_id = 1;
+  string session_id = 2;
+  // Raw datachannel payload bytes (UTF-8 text or opaque).
+  bytes payload = 3;
+  // "all" | "except" when dest_ids is empty. Ignored when dest_ids is non-empty.
+  string dest = 4;
+  // Explicit participant id list (REST JSON array dest).
+  repeated string dest_ids = 5;
+  string label = 6;
+}
+
+message PublishResponse {}
